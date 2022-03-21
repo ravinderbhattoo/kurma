@@ -3,11 +3,13 @@ This module is for creating functions related to structure parameters.
 
 """
 
-from kurma import frames as fr
-import numpy as np
 import itertools
 
 import matplotlib.pyplot as plt
+import numpy as np
+from kurma import _print
+from kurma import frames as fr
+
 
 class PDF:
     r"""
@@ -28,38 +30,42 @@ class PDF:
         P.PDF.keys()
 
         fig, ax = plt.subplots(1,1)
-        P.plot('all-all', 'PDF', label='PDF1', leg_prop=leg_prop, ax=ax, mean=True,shift=5)
-        #P.plot('2-1_0', 'PDF', label='PDF2', leg_prop=leg_prop, ax=ax)
+        P.plot('all-all', 'PDF', label='PDF1',
+               leg_prop=leg_prop, ax=ax, mean=True,shift=5)
+        # P.plot('2-1_0', 'PDF', label='PDF2', leg_prop=leg_prop, ax=ax)
         xlabel('Distance, r ($\AA$)')
         ylabel('Pair distribution function (PDF)')
         plt.legend()
         plt.show()
 
         fig, ax = plt.subplots(1,1)
-        P.plot('all-all', 'TCF', label='TCF1', leg_prop=leg_prop, ax=ax, mean=True,shift=80)
-        #P.plot('2-1_0', 'TCF', label='TCF2', leg_prop=leg_prop,ax=ax)
+        P.plot('all-all', 'TCF', label='TCF1',
+               leg_prop=leg_prop, ax=ax, mean=True,shift=80)
+        # P.plot('2-1_0', 'TCF', label='TCF2', leg_prop=leg_prop,ax=ax)
         xlabel('Distance, r ($\AA$)')
         ylabel('Total correlation function (TCF)')
         plt.legend()
         plt.show()
 
         fig, ax = plt.subplots(1,1)
-        P.plot('all-all', 'SQ', label='SQ1', leg_prop=leg_prop, mean=True, ax=ax, shift=10)
-        #P.plot('2-1_0', 'SQ', label='SQ2', leg_prop=leg_prop, ax=ax)
+        P.plot('all-all', 'SQ', label='SQ1',
+               leg_prop=leg_prop, mean=True, ax=ax, shift=10)
+        # P.plot('2-1_0', 'SQ', label='SQ2', leg_prop=leg_prop, ax=ax)
         xlabel('Wave-vector, q (k)')
         ylabel('Structure function (SQ)')
         plt.legend()
         plt.show()
 
         cutoff={'2-1':1.6}
-        c = P.CN(cutoff,frame_index=[0],default=1.6)
+        c = P.CN_analysis(cutoff,frame_index=[0],default=1.6)
 
         shift = 0
         fig, ax = plt.subplots(1,1)
         for key in P.bond_angles[0].keys():
             if P.bond_angles[0][key][0] != []:
                 a = str(key).split('0')
-                P.plot_bond_angles([[int(i) for i in a]],ax=ax,shift=shift,label='{}'.format(key))
+                P.plot_bond_angles([[int(i) for i in a]],
+                                   ax=ax,shift=shift,label='{}'.format(key))
                 shift += 10
 
         ylabel('Frequency')
@@ -71,7 +77,7 @@ class PDF:
 
     """
 
-    def __init__(self, filename=None, dim=3, fn=[1], info=None):
+    def __init__(self, filename=None, dim=3, fn=[1], info=None, verbose=False, nperiodic=0):
         r"""
         Parameters:
         -----------
@@ -85,8 +91,9 @@ class PDF:
         """
 
         print('Calculates only for orthogonal box !!!')
-        if filename!=None:
-            self.frames, self.box, self.names = fr.get_frames(filename, fn=fn)
+        if filename != None:
+            self.frames, self.box, self.names = fr.get_frames(
+                filename, fn=fn, verbose=verbose)
         else:
             self.frames, self.box, self.names = info
 
@@ -104,6 +111,33 @@ class PDF:
         self.SQ = {}
         self.nb_list = {}
         self.bond_angles = {}
+        self.verbose = verbose
+
+        if isinstance(nperiodic, list):
+            self.nperiodic = [i+1 for i in nperiodic]
+        else:
+            self.nperiodic = [nperiodic+1]*dim
+            if self.dim == 2:
+                self.nperiodic = self.nperiodic + [1]
+
+    def periodic_image(self, delta, l):
+        r2 = []
+        dr = np.minimum(delta, np.abs(delta - l))
+        # for i in range(self.nperiodic[0]):
+        #     disti = 1*dr
+        #     disti[:, 0] = disti[:, 0] + i*l[0]
+        #     for j in range(self.nperiodic[1]):
+        #         distj = 1*disti
+        #         distj[:, 1] = distj[:, 1] + j*l[1]
+        #         for k in range(self.nperiodic[2]):
+        #             distk = 1*distj
+        #             try:
+        #                 distk[:, 2] = distk[:, 2] + k*l[3]
+        #             except:
+        #                 pass
+        #             r2 += [(distk**2).sum(axis=1)]
+        r2 += [(dr**2).sum(axis=1)]
+        return np.stack(r2).flatten()
 
     def make_gr_n(self, atoms=[None, None], radius=10, bins=500, frame_index=None, shi_n=None, key=''):
         print('Calculating g{}(r) for: '.format(key), atoms)
@@ -114,12 +148,12 @@ class PDF:
                 frame_index = range(len(self.frames))
 
             for f, b, i in zip([self.frames[i] for i in frame_index], [self.box[i] for i in frame_index], frame_index):
-                print('Frame index: ', i)
+                _print(self.verbose, 'Frame index: ', i)
                 self.c_frame = f
                 self.c_box = b
                 self.c_fn = i
                 shi = np.abs(shi_n[i]).reshape(-1)
-                self.cal_gr_n(atoms,shi,radius, bins, r_step, key)
+                self.cal_gr_n(atoms, shi, radius, bins, r_step, key)
         else:
             pass
 
@@ -137,7 +171,7 @@ class PDF:
             else:
                 for x in ca:
                     mask_ca = mask_ca | (self.c_frame['type'] == x)
-                pos_ca = self.c_frame[['x', 'y', 'z']].values[mask_ca,:]
+                pos_ca = self.c_frame[['x', 'y', 'z']].values[mask_ca, :]
                 shi_ca = shi[mask_ca]
 
             mask_fa = False
@@ -148,7 +182,7 @@ class PDF:
             else:
                 for x in fa:
                     mask_fa = mask_fa | (self.c_frame['type'] == x)
-                pos_fa = self.c_frame[['x', 'y', 'z']].values[mask_fa,:]
+                pos_fa = self.c_frame[['x', 'y', 'z']].values[mask_fa, :]
                 shi_fa = shi[mask_fa]
 
             l = self.c_box[:, 1] - self.c_box[:, 0]
@@ -156,15 +190,15 @@ class PDF:
             hist, _ = np.histogram(
                 [-1], range=[0, radius], bins=bins)
             g3 = np.zeros(hist.shape)
-            for i,shi_ in zip(pos_ca,shi_ca):
+            for i, shi_ in zip(pos_ca, shi_ca):
                 delta = np.abs(pos_fa - i)
                 r2 = (np.minimum(delta, np.abs(delta - l))**2).sum(axis=1)
-                mask = r2<(radius)**2
+                mask = r2 < (radius)**2
                 inds = np.digitize(np.sqrt(r2[mask]), _)
                 r2 = shi_fa[mask]*shi_
-                for e_ind,r2_ in zip(inds,r2):
-                    if (e_ind<len(hist)) and (e_ind>1):
-                        g3[e_ind] +=  r2_
+                for e_ind, r2_ in zip(inds, r2):
+                    if (e_ind < len(hist)) and (e_ind > 1):
+                        g3[e_ind] += r2_
 
             rs = (_[1:] + _[:-1]) / 2
             if self.dim == 3:
@@ -180,9 +214,8 @@ class PDF:
 
             g3 = g3 / len(pos_ca) / div / len(pos_fa) * vol
             key += '{}-{}'.format(','.join([str(i) for i in ca]),
-                                 ','.join([str(i) for i in fa])) + '_' + str(self.c_fn)
+                                  ','.join([str(i) for i in fa])) + '_' + str(self.c_fn)
             self.gr_n[key] = [g3.copy(), rs.copy()]
-
 
     def make_pdf(self, atoms=[None, None], radius=30, bins=300, frame_index=None, cal_sq=True, Q=30, q_bins=300, R=50, rho=[1]):
         r"""
@@ -231,7 +264,7 @@ class PDF:
                 frame_index = range(len(self.frames))
 
             for f, b, i in zip([self.frames[i] for i in frame_index], [self.box[i] for i in frame_index], frame_index):
-                print('Frame index: ', i)
+                _print(self.verbose, 'Frame index: ', i)
                 self.c_frame = f
                 self.c_box = b
                 self.c_fn = i
@@ -252,7 +285,7 @@ class PDF:
             else:
                 for x in ca:
                     mask_ca = mask_ca | (self.c_frame['type'] == x)
-                pos_ca = self.c_frame[['x', 'y', 'z']].values[mask_ca,:]
+                pos_ca = self.c_frame[['x', 'y', 'z']].values[mask_ca, :]
 
             mask_fa = False
             if fa == None:
@@ -261,7 +294,7 @@ class PDF:
             else:
                 for x in fa:
                     mask_fa = mask_fa | (self.c_frame['type'] == x)
-                pos_fa = self.c_frame[['x', 'y', 'z']].values[mask_fa,:]
+                pos_fa = self.c_frame[['x', 'y', 'z']].values[mask_fa, :]
 
             l = self.c_box[:, 1] - self.c_box[:, 0]
 
@@ -270,12 +303,11 @@ class PDF:
 
             for i in pos_ca:
                 delta = np.abs(pos_fa - i)
-                r2 = (np.minimum(delta, np.abs(delta - l))**2).sum(axis=1)
-                r2 = r2[r2<(self.radius)**2]
+                r2 = self.periodic_image(delta, l)
+                r2 = r2[r2 < (self.radius)**2]
                 h, _ = np.histogram(
                     np.sqrt(r2), range=[1e-5, self.radius], bins=self.r_bins)
                 hist += h
-
 
             rs = (_[1:] + _[:-1]) / 2
             if self.dim == 3:
@@ -298,9 +330,9 @@ class PDF:
             if self.do_cal_sq:
                 self.cal_sq([key], **self.sq_prop)
 
-    def cal_sq(self, keys, Q=20, dq=0.1, R=50, rho = None):
+    def cal_sq(self, keys, Q=20, dq=0.1, R=50, rho=None):
         for key in keys:
-            print('Calculating SQ for: ', key)
+            _print(self.verbose, 'Calculating SQ for: ', key)
             if key not in self.PDF.keys():
                 print('No such PDF exists !!!')
             else:
@@ -309,14 +341,15 @@ class PDF:
                 dr = r[1]-r[0]
                 sq_list = np.zeros((int(Q/dq)))
                 q_list = np.zeros((int(Q/dq)))
-                for i in range(1,1+int(Q/dq)):
+                for i in range(1, 1+int(Q/dq)):
                     q_list[i-1] = dq*i
                     # F = sin(pi*r/R) / (pi*r/R)
                     # sq = integral [2*pi*r*(pdf-1)*sin(q*r)/q/r ] dr
                     F = np.sin(np.pi*r/R) / (np.pi*r/R)
-                    sq_list[i-1] = 1+rho_*(2*np.pi*r*(p-1)*np.sin(dq*i*r)/(dq*i*r)*F*dr).sum()
+                    sq_list[i-1] = 1+rho_ * \
+                        (2*np.pi*r*(p-1)*np.sin(dq*i*r)/(dq*i*r)*F*dr).sum()
 
-                self.SQ[key] = [sq_list,q_list]
+                self.SQ[key] = [sq_list, q_list]
 
     def plot(self, key, which, *args, leg_prop={}, mean=False, lz_fit={}, ax=None, shift=0, **kwargs):
         which = self.__getattribute__(which)
@@ -339,10 +372,10 @@ class PDF:
                 ax.plot(x, p+shift, *args, **kwargs)
         return p, x
 
-    def CN(self, cutoff={}, default=2.0, frame_index=[0]):
+    def CN_analysis(self, cutoff={}, default=2.0, frame_index=[0]):
         for f, box, fi in zip([self.frames[i] for i in frame_index],
-                            [self.box[i] for i in frame_index], frame_index):
-            print('Calculating nb_list for frame index ', fi)
+                              [self.box[i] for i in frame_index], frame_index):
+            _print(self.verbose, 'Calculating nb_list for frame index ', fi)
             nb_list = {}
             L = box[:, 1] - box[:, 0]
             pos = f[['x', 'y', 'z']].values
@@ -366,7 +399,7 @@ class PDF:
                 delta = np.abs(pos - ca)
                 r2 = ((np.minimum(delta, np.abs(delta - L))**2).sum(axis=1))
                 mask = (r2 < np.max(list(cut.values()) +
-                                   [default])**2) & (r2 > 1.0e-3)
+                                    [default])**2) & (r2 > 1.0e-3)
                 r2 = r2[mask]
                 ids = f.id[mask]
                 types = f.type[mask]
@@ -382,15 +415,15 @@ class PDF:
                 ids_list.append(l2)
                 for s_atoms in itertools.combinations(zip(l1, l2), 2):
                     a = (data[ids == s_atoms[0][1]] - ca)[0]
-                    mask = (a>L/2)
+                    mask = (a > L/2)
                     a[mask] -= L[mask]
-                    mask = (a<-L/2)
+                    mask = (a < -L/2)
                     a[mask] += L[mask]
 
                     b = (data[ids == s_atoms[1][1]] - ca)[0]
-                    mask = (b>L/2)
+                    mask = (b > L/2)
                     b[mask] -= L[mask]
-                    mask = (b<-L/2)
+                    mask = (b < -L/2)
                     b[mask] += L[mask]
 
                     ct = (a * b.T).sum() / \
@@ -404,18 +437,58 @@ class PDF:
                                 types_list, ids_list, len(ids_list)]
         return plt.gcf()
 
-    def plot_bond_angles(self, key_list, *args, bins=360, ax=None, frame_index=[0], shift=0, **kwargs):
+    def plot_bond_angles(self, key_list, *args, bins=360, ax=None, bandwidth=5, plot_average=True, frame_index=None, shift=0, **kwargs):
+
+        from sklearn.neighbors import KernelDensity
+
+        def KDE(data):
+            Vecvalues = data[:, None]
+            Vecpoints = np.linspace(0, 180, bins)[:, None]
+            kde = KernelDensity(kernel='gaussian',
+                                bandwidth=bandwidth).fit(Vecvalues)
+            h = np.exp(kde.score_samples(Vecpoints))
+            return h, Vecpoints.flatten()
+
         if ax is None:
             fig, ax = plt.subplots(1, 1)
+        if frame_index is None:
+            frame_index = list(self.bond_angles.keys())
         hist = []
+        values = []
         for fi in frame_index:
             for key in key_list:
                 y = self.bond_angles[fi][key[0] +
                                          key[1] * 100 + key[2] * 10000][0]
                 y = 180 / np.pi * np.array(y)
+                hkde, _ = KDE(y)
                 h, _ = np.histogram(y, range=[0, 180], bins=bins)
                 h = h / h.sum() * 100
                 x = (_[1:] + _[:-1]) / 2
-                ax.plot(x, h+shift, *args, **kwargs)
+                if not(plot_average):
+                    ax.plot(x, hkde+shift, *args, **kwargs)
                 hist += [h]
+                values += [y]
+        if plot_average:
+            h = 0
+            for item in hist:
+                h += item
+            h /= len(hist)
+            hkde, x = KDE(np.concatenate([i.flatten()
+                          for i in values]).flatten())
+            ax.plot(x, hkde+shift, *args, **kwargs)
         return hist, x
+
+    def coordination_number(self, species, average=True, frame_index=None):
+        if frame_index is None:
+            frame_index = list(self.nb_list.keys())
+        cn = {k: [] for k in species}
+        for fn in frame_index:
+            tps = self.nb_list[fn][1]
+            nb = self.nb_list[fn][2]
+            for tp in species:
+                if average:
+                    cn[tp] += [sum([len(i) for i, j in zip(nb, tps)
+                                   if j == tp])/sum(tps == tp)]
+                else:
+                    cn[tp] += [[len(i) for i, j in zip(nb, tps) if j == tp]]
+        return cn

@@ -1,26 +1,32 @@
-import numpy as onp
-import jax.numpy as np
-from jax import vmap, jit
 from functools import partial
-from jax.ops import index_update, index_add, index_min, index_max
+
+import jax.numpy as np
+import numpy as onp
+from jax import jit, vmap
+from jax.ops import index_add, index_max, index_min, index_update
 
 
-def cal_inds(r,_1,_2,N):
-    return np.where((_1<r)*(_2>r),np.arange(N),N)
-vmap_cal_inds = vmap(cal_inds,(0,None,None,None))
+def cal_inds(r, _1, _2, N):
+    return np.where((_1 < r)*(_2 > r), np.arange(N), N)
 
 
-def cal_intermediate(pos_ca0,shi_ca0,pos_fa,shi_fa,l,hist,_1,_2,N):
+vmap_cal_inds = vmap(cal_inds, (0, None, None, None))
+
+
+def cal_intermediate(pos_ca0, shi_ca0, pos_fa, shi_fa, l, hist, _1, _2, N):
     delta = np.abs(pos_fa - pos_ca0)
     r = np.sqrt((np.minimum(delta, np.abs(delta - l))**2).sum(axis=1))
-    inds = vmap_cal_inds(r,_1,_2,N)
+    inds = vmap_cal_inds(r, _1, _2, N)
     val = shi_fa*shi_ca0
-    index_add(hist,inds,val)
-    index_update(hist,[0,1],0)
-    index_update(hist,[N-1],0)
+    index_add(hist, inds, val)
+    index_update(hist, [0, 1], 0)
+    index_update(hist, [N-1], 0)
     return hist
 
-vmap_cal_intermediate = vmap(partial(cal_intermediate),(0,0,None,None,None,None,None,None,None))
+
+vmap_cal_intermediate = vmap(
+    partial(cal_intermediate), (0, 0, None, None, None, None, None, None, None))
+
 
 def cal_gr_n(atoms, pos, type, box, radius=10, bins=100, shi_n=None, key='', dim=3):
     r_step = radius / bins
@@ -37,7 +43,7 @@ def cal_gr_n(atoms, pos, type, box, radius=10, bins=100, shi_n=None, key='', dim
             else:
                 for x in ca:
                     mask_ca = mask_ca | (type == x)
-                return pos[mask_ca,:], shi[mask_ca]
+                return pos[mask_ca, :], shi[mask_ca]
 
         pos_ca, shi_ca = masked_data(ca)
         pos_fa, shi_fa = masked_data(fa)
@@ -49,7 +55,8 @@ def cal_gr_n(atoms, pos, type, box, radius=10, bins=100, shi_n=None, key='', dim
         _1 = _[:-1]
         _2 = _[1:]
 
-        hist = vmap_cal_intermediate(pos_ca,shi_ca,pos_fa,shi_fa,l,hist,_1,_2,len(hist))
+        hist = vmap_cal_intermediate(
+            pos_ca, shi_ca, pos_fa, shi_fa, l, hist, _1, _2, len(hist))
 
         print(hist.shape)
 
@@ -68,8 +75,9 @@ def cal_gr_n(atoms, pos, type, box, radius=10, bins=100, shi_n=None, key='', dim
 
         hist = hist / len(pos_ca) / div / len(pos_fa) * vol
         key += '{}-{}'.format(','.join([str(i) for i in ca]),
-                             ','.join([str(i) for i in fa]))
+                              ','.join([str(i) for i in fa]))
         return hist, rs
+
 
 def make_pdf(self, atoms=[None, None], radius=30, bins=300, frame_index=None, cal_sq=True, Q=30, q_bins=300, R=50, rho=[1]):
     r"""
@@ -126,6 +134,7 @@ def make_pdf(self, atoms=[None, None], radius=30, bins=300, frame_index=None, ca
     else:
         pass
 
+
 def cal_pdf(self, atoms):
     if atoms == []:
         pass
@@ -139,7 +148,7 @@ def cal_pdf(self, atoms):
         else:
             for x in ca:
                 mask_ca = mask_ca | (self.c_frame['type'] == x)
-            pos_ca = self.c_frame[['x', 'y', 'z']].values[mask_ca,:]
+            pos_ca = self.c_frame[['x', 'y', 'z']].values[mask_ca, :]
 
         mask_fa = False
         if fa == None:
@@ -148,7 +157,7 @@ def cal_pdf(self, atoms):
         else:
             for x in fa:
                 mask_fa = mask_fa | (self.c_frame['type'] == x)
-            pos_fa = self.c_frame[['x', 'y', 'z']].values[mask_fa,:]
+            pos_fa = self.c_frame[['x', 'y', 'z']].values[mask_fa, :]
 
         l = self.c_box[:, 1] - self.c_box[:, 0]
 
@@ -158,11 +167,10 @@ def cal_pdf(self, atoms):
         for i in pos_ca:
             delta = onp.abs(pos_fa - i)
             r2 = (onp.minimum(delta, onp.abs(delta - l))**2).sum(axis=1)
-            r2 = r2[r2<(self.radius)**2]
+            r2 = r2[r2 < (self.radius)**2]
             h, _ = onp.histogram(
                 onp.sqrt(r2), range=[1e-5, self.radius], bins=self.r_bins)
             hist += h
-
 
         rs = (_[1:] + _[:-1]) / 2
         if self.dim == 3:
@@ -185,7 +193,8 @@ def cal_pdf(self, atoms):
         if self.do_cal_sq:
             self.cal_sq([key], **self.sq_prop)
 
-def cal_sq(self, keys, Q=20, dq=0.1, R=50, rho = None):
+
+def cal_sq(self, keys, Q=20, dq=0.1, R=50, rho=None):
     for key in keys:
         print('Calculating SQ for: ', key)
         if key not in self.PDF.keys():
@@ -196,12 +205,13 @@ def cal_sq(self, keys, Q=20, dq=0.1, R=50, rho = None):
             dr = r[1]-r[0]
             sq_list = onp.zeros((int(Q/dq)))
             q_list = onp.zeros((int(Q/dq)))
-            for i in range(1,1+int(Q/dq)):
+            for i in range(1, 1+int(Q/dq)):
                 q_list[i-1] = dq*i
                 # F = sin(pi*r/R) / (pi*r/R)
                 # sq = integral [2*pi*r*(pdf-1)*sin(q*r)/q/r ] dr
 
                 F = onp.sin(onp.pi*r/R) / (onp.pi*r/R)
-                sq_list[i-1] = 1+rho_*(2*onp.pi*r*(p-1)*onp.sin(dq*i*r)/(dq*i*r)*F*dr).sum()
+                sq_list[i-1] = 1+rho_ * \
+                    (2*onp.pi*r*(p-1)*onp.sin(dq*i*r)/(dq*i*r)*F*dr).sum()
 
-            self.SQ[key] = [sq_list,q_list]
+            self.SQ[key] = [sq_list, q_list]
