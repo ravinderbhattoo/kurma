@@ -355,7 +355,7 @@ class PDF:
         which = self.__getattribute__(which)
         if key in which.keys() or mean:
             if ax is None:
-                fig, ax = plt.panel(1, 1)
+                fig, ax = plt.subplots(1, 1)
             if mean:
                 p = 0
                 ind = 0
