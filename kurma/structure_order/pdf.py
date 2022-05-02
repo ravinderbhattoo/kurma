@@ -7,6 +7,7 @@ import itertools
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from kurma import _print
 from kurma import frames as fr
 
@@ -330,7 +331,7 @@ class PDF:
             if self.do_cal_sq:
                 self.cal_sq([key], **self.sq_prop)
 
-    def cal_sq(self, keys, Q=20, dq=0.1, R=50, rho=None):
+    def cal_sq(self, keys, Q=20, dq=0.1, R=50, rho=None, lambda_=1):
         for key in keys:
             _print(self.verbose, 'Calculating SQ for: ', key)
             if key not in self.PDF.keys():
@@ -346,13 +347,22 @@ class PDF:
                     # F = sin(pi*r/R) / (pi*r/R)
                     # sq = integral [2*pi*r*(pdf-1)*sin(q*r)/q/r ] dr
                     F = np.sin(np.pi*r/R) / (np.pi*r/R)
-                    sq_list[i-1] = 1+rho_ * \
-                        (2*np.pi*r*(p-1)*np.sin(dq*i*r)/(dq*i*r)*F*dr).sum()
+                    sq_list[i-1] = 1 + lambda_ * rho_ * \
+                        (4*np.pi*r*(p-1)*np.sin(dq*i*r)/(dq*i*r)*F*dr).sum()
 
                 self.SQ[key] = [sq_list, q_list]
 
-    def plot(self, key, which, *args, leg_prop={}, mean=False, lz_fit={}, ax=None, shift=0, **kwargs):
+    def plot(self, key, which, *args, leg_prop={}, mean=False, lz_fit={}, ax=None, shift=0,
+             window=5, min_periods=None, center=False, win_type=None, on=None, axis=0, closed=None,
+             **kwargs):
+
         which = self.__getattribute__(which)
+
+        def rolling(data):
+            df = pd.DataFrame(data)
+            df = df.rolling(window).mean()
+            return df.values
+
         if key in which.keys() or mean:
             if ax is None:
                 fig, ax = plt.subplots(1, 1)
@@ -366,10 +376,14 @@ class PDF:
                         ind += 1
                 p = p / ind
                 x = list(which.values())[0][1]
-                ax.plot(x, p+shift, *args, **kwargs)
+
+                y_ = rolling(p.flatten())
+
+                ax.plot(x, y_ + shift, *args, **kwargs)
             else:
                 p, x = which[key]
-                ax.plot(x, p+shift, *args, **kwargs)
+                y_ = rolling(p.flatten())
+                ax.plot(x, y_ + shift, *args, **kwargs)
         return p, x
 
     def CN_analysis(self, cutoff={}, default=2.0, frame_index=[0]):
